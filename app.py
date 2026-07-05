@@ -183,7 +183,11 @@ TPL_DASH = """
 </style></head><body>
 <header>
   <h1>🧵 Validación de Enlaces</h1>
-  <a class="btn btn-azul" href="{{ url_for('nuevo') }}">+ Nuevo Enlace</a>
+  <div>
+    <a class="btn btn-borde-verde" style="margin-right:6px"
+       href="{{ url_for('reporte_avance') }}">📊 Reporte de Avance</a>
+    <a class="btn btn-azul" href="{{ url_for('nuevo') }}">+ Nuevo Enlace</a>
+  </div>
 </header>
 <div class="grid">
 
@@ -605,5 +609,165 @@ def exportar(id):
                               ".spreadsheetml.sheet")
 
 
+
+# ============================================================
+# 5) REPORTE DE AVANCE (Excel consolidado generado en vivo)
+# ============================================================
+@app.route("/reporte-avance.xlsx")
+def reporte_avance():
+    """Excel con RESUMEN (KPIs, por anillo, por capacidad) + detalle
+    de pendientes y validados, calculado con los datos actuales."""
+    todos = Enlace.query.order_by(Enlace.creado.asc()).all()
+    pend = [e for e in todos if e.estado == "INCOMPLETO"]
+    valid = [e for e in todos if e.estado == "VALIDADO"]
+    ahora = datetime.now()
+
+    azul = PatternFill("solid", start_color="1F4E79")
+    azul2 = PatternFill("solid", start_color="2E75B6")
+    gris = PatternFill("solid", start_color="F2F2F2")
+    verde = PatternFill("solid", start_color="70AD47")
+    thin = Side(style="thin", color="BFBFBF")
+    borde = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    def hdr_row(ws, fila, textos, fill=azul):
+        for i, t in enumerate(textos, 1):
+            c = ws.cell(fila, i, t)
+            c.font = Font(bold=True, color="FFFFFF", size=10)
+            c.fill = fill
+            c.alignment = Alignment(horizontal="center", vertical="center")
+            c.border = borde
+
+    wb = Workbook()
+
+    # ---------- HOJA RESUMEN ----------
+    rs = wb.active
+    rs.title = "RESUMEN"
+    rs["A1"] = "REPORTE DE AVANCE — VALIDACIÓN DE ENLACES"
+    rs["A1"].font = Font(bold=True, size=14, color="1F4E79")
+    rs["A2"] = f"Generado: {ahora:%d/%m/%Y %H:%M}"
+    rs["A2"].font = Font(size=9, color="595959")
+
+    total = len(todos)
+    hilos_pend = sum(e.capacidad for e in pend)
+    hilos_ok = sum(e.capacidad for e in valid)
+    dias = lambda e: (ahora - e.creado).days
+    kpis = [
+        ("Total de enlaces", total),
+        ("Enlaces validados (A y B)", len(valid)),
+        ("Enlaces pendientes", len(pend)),
+        ("% de avance de validación",
+         f"{(len(valid)/total*100):.1f}%" if total else "0%"),
+        ("Hilos validados", hilos_ok),
+        ("Hilos pendientes", hilos_pend),
+        ("Pendiente más antiguo (días)", max((dias(e) for e in pend), default=0)),
+        ("Antigüedad promedio pendientes (días)",
+         round(sum(dias(e) for e in pend)/len(pend)) if pend else 0),
+        ("Pendientes solo por Extremo B",
+         sum(1 for e in pend if e.a_completo and not e.b_completo)),
+        ("Pendientes solo por Extremo A",
+         sum(1 for e in pend if e.b_completo and not e.a_completo)),
+        ("Pendientes por ambos extremos",
+         sum(1 for e in pend if not e.a_completo and not e.b_completo)),
+    ]
+    rs["A4"] = "INDICADORES GENERALES"
+    rs["A4"].font = Font(bold=True, size=11, color="1F4E79")
+    hdr_row(rs, 5, ["INDICADOR", "VALOR"], azul2)
+    for i, (k, v) in enumerate(kpis):
+        r = 6 + i
+        rs.cell(r, 1, k).border = borde
+        c = rs.cell(r, 2, v)
+        c.border = borde
+        c.font = Font(bold=True)
+        c.alignment = Alignment(horizontal="center")
+
+    # Avance por anillo
+    anillos = ["ANILLO NORTE", "ANILLO SUR", "ANILLO ESTE", "ANILLO OESTE"]
+    rs["D4"] = "AVANCE POR ANILLO"
+    rs["D4"].font = Font(bold=True, size=11, color="1F4E79")
+    hdr_row_cells = ["ANILLO", "PENDIENTES", "VALIDADOS", "% AVANCE"]
+    for i, t in enumerate(hdr_row_cells):
+        c = rs.cell(5, 4 + i, t)
+        c.font = Font(bold=True, color="FFFFFF", size=10)
+        c.fill = azul2
+        c.alignment = Alignment(horizontal="center")
+        c.border = borde
+    for i, an in enumerate(anillos):
+        r = 6 + i
+        np_ = sum(1 for e in pend if e.anillo == an)
+        nv = sum(1 for e in valid if e.anillo == an)
+        pct = f"{(nv/(np_+nv)*100):.0f}%" if (np_ + nv) else "-"
+        for j, v in enumerate([an, np_, nv, pct]):
+            c = rs.cell(r, 4 + j, v)
+            c.border = borde
+            if j:
+                c.alignment = Alignment(horizontal="center")
+
+    # Por capacidad
+    rs["D12"] = "PENDIENTES POR CAPACIDAD"
+    rs["D12"].font = Font(bold=True, size=11, color="1F4E79")
+    for i, t in enumerate(["CAPACIDAD", "ENLACES", "HILOS"]):
+        c = rs.cell(13, 4 + i, t)
+        c.font = Font(bold=True, color="FFFFFF", size=10)
+        c.fill = azul2
+        c.alignment = Alignment(horizontal="center")
+        c.border = borde
+    for i, cap in enumerate([24, 48, 96]):
+        r = 14 + i
+        n = sum(1 for e in pend if e.capacidad == cap)
+        for j, v in enumerate([f"{cap} hilos", n, n * cap]):
+            c = rs.cell(r, 4 + j, v)
+            c.border = borde
+            if j:
+                c.alignment = Alignment(horizontal="center")
+
+    for col, w in zip("ABCDEFG", [36, 12, 3, 18, 13, 12, 12]):
+        rs.column_dimensions[col].width = w
+
+    # ---------- HOJA PENDIENTES ----------
+    wp = wb.create_sheet("PENDIENTES")
+    hdr_row(wp, 1, ["N°", "ANILLO", "ENLACE", "TRAMO (A → B)", "CAP.",
+                    "CREADO", "DÍAS", "QUÉ FALTA"])
+    for i, e in enumerate(sorted(pend, key=lambda x: x.creado), 1):
+        wp.append([i, e.anillo, e.nombre,
+                   f"{e.origen_a or '?'} → {e.origen_b or '?'}",
+                   e.capacidad, e.creado.strftime("%d/%m/%Y %H:%M"),
+                   dias(e), e.pendiente_texto])
+        for c in range(1, 9):
+            cell = wp.cell(i + 1, c)
+            cell.border = borde
+            cell.font = Font(size=9)
+            if i % 2 == 0:
+                cell.fill = gris
+    for col, w in zip("ABCDEFGH", [5, 15, 30, 30, 7, 15, 7, 24]):
+        wp.column_dimensions[col].width = w
+    wp.freeze_panes = "A2"
+    wp.auto_filter.ref = f"A1:H{len(pend)+1}"
+
+    # ---------- HOJA VALIDADOS ----------
+    wv = wb.create_sheet("VALIDADOS")
+    hdr_row(wv, 1, ["N°", "ANILLO", "ENLACE", "TRAMO (A ⇄ B)", "CAP.",
+                    "CREADO", "HILOS CON DIFERENCIAS"], verde)
+    for i, e in enumerate(sorted(valid, key=lambda x: x.creado), 1):
+        difs = sum(1 for h in e.hilos if not h.coincide)
+        wv.append([i, e.anillo, e.nombre,
+                   f"{e.origen_a} ⇄ {e.origen_b}", e.capacidad,
+                   e.creado.strftime("%d/%m/%Y %H:%M"), difs])
+        for c in range(1, 8):
+            cell = wv.cell(i + 1, c)
+            cell.border = borde
+            cell.font = Font(size=9)
+    for col, w in zip("ABCDEFG", [5, 15, 30, 30, 7, 15, 22]):
+        wv.column_dimensions[col].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(buf, as_attachment=True,
+                     download_name=f"REPORTE_AVANCE_{ahora:%Y%m%d}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument"
+                              ".spreadsheetml.sheet")
+
+
 if __name__ == "__main__":
+
     app.run(debug=True)
