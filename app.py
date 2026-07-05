@@ -41,8 +41,16 @@ class Enlace(db.Model):
     anillo = db.Column(db.String(30), nullable=False)
     nombre = db.Column(db.String(120), nullable=False)
     capacidad = db.Column(db.Integer, nullable=False, default=24)
+    tipo_cable = db.Column(db.String(60), default="CABLE DE ENLACE SM")
+    longitud = db.Column(db.String(40), default="")
     origen_a = db.Column(db.String(80), default="")
+    sala_a = db.Column(db.String(80), default="")
+    rack_a = db.Column(db.String(40), default="")
+    posicion_a = db.Column(db.String(40), default="")
     origen_b = db.Column(db.String(80), default="")
+    sala_b = db.Column(db.String(80), default="")
+    rack_b = db.Column(db.String(40), default="")
+    posicion_b = db.Column(db.String(40), default="")
     a_completo = db.Column(db.Boolean, default=False)   # ← lado A registrado
     b_completo = db.Column(db.Boolean, default=False)   # ← lado B registrado
     creado = db.Column(db.DateTime, default=datetime.utcnow)
@@ -116,6 +124,10 @@ SEED = [
     ("ANILLO SUR",   "SAN JUAN - POLO 2",         "SAN JUAN",    "POLO 2",      96, "2026-01-08 00:14:39", True, True),
     ("ANILLO SUR",   "SAN JUAN - CHORRILLOS",     "SAN JUAN",    "CHORRILLOS",  48, "2026-01-07 20:04:48", True, True),
 ]
+
+
+CATALOGO_ENLACES = sorted({s[1] for s in SEED})
+TIPOS_CABLE = ["CABLE DE ENLACE SM", "ADSS", "OPGW", "FIGURA 8", "ARMADO", "DUCTO", "OTRO"]
 
 
 def seed_inicial():
@@ -304,13 +316,18 @@ def completar(id, lado):
 
     if request.method == "POST":
         origen = request.form.get("origen", "").strip()
+        sala = request.form.get("sala", "").strip()
+        rack = request.form.get("rack", "").strip()
+        pos = request.form.get("posicion", "").strip()
         if es_a:
             e.origen_a = origen or e.origen_a
+            e.sala_a, e.rack_a, e.posicion_a = sala, rack, pos
             for h in e.hilos:
                 h.descripcion_a = request.form.get(f"h{h.numero}", "").strip()
             e.a_completo = True
         else:
             e.origen_b = origen or e.origen_b
+            e.sala_b, e.rack_b, e.posicion_b = sala, rack, pos
             for h in e.hilos:
                 h.descripcion_b = request.form.get(f"h{h.numero}", "").strip()
             e.b_completo = True
@@ -344,6 +361,14 @@ def completar(id, lado):
     <form method="post">
       <label>Origen (Sitio {letra})</label>
       <input name="origen" value="{origen_actual}" required>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div><label>Sala {letra}</label>
+          <input name="sala" value="{(e.sala_a if es_a else e.sala_b) or ''}"></div>
+        <div><label>Rack {letra}</label>
+          <input name="rack" value="{(e.rack_a if es_a else e.rack_b) or ''}"></div>
+        <div><label>Posición {letra}</label>
+          <input name="posicion" value="{(e.posicion_a if es_a else e.posicion_b) or ''}"></div>
+      </div>
       <table>
         <tr><th>Fibra</th>{th_ref}<th>Descripción Extremo {letra}</th></tr>
         {''.join(filas)}
@@ -360,25 +385,143 @@ def completar(id, lado):
 def editar(id):
     e = Enlace.query.get_or_404(id)
     if request.method == "POST":
-        e.nombre = request.form.get("nombre", e.nombre)
-        e.origen_a = request.form.get("origen_a", e.origen_a)
-        e.origen_b = request.form.get("origen_b", e.origen_b)
+        # --- Nombre: select "mantener" o manual ---
+        sel = request.form.get("nombre_sel", "").strip()
+        manual = request.form.get("nombre_manual", "").strip()
+        if manual:
+            e.nombre = manual
+        elif sel and sel != "__actual__":
+            e.nombre = sel
+
+        e.tipo_cable = request.form.get("tipo_cable", e.tipo_cable).strip()
+        e.longitud = request.form.get("longitud", e.longitud).strip()
+
+        # --- Capacidad: si reduce, se eliminan hilos mayores a N; si aumenta, se crean ---
+        try:
+            nueva_cap = int(request.form.get("capacidad") or e.capacidad)
+        except ValueError:
+            nueva_cap = e.capacidad
+        if nueva_cap != e.capacidad and nueva_cap > 0:
+            if nueva_cap < e.capacidad:
+                for h in list(e.hilos):
+                    if h.numero > nueva_cap:
+                        db.session.delete(h)
+            else:
+                for n in range(e.capacidad + 1, nueva_cap + 1):
+                    e.hilos.append(Hilo(numero=n))
+            e.capacidad = nueva_cap
+
+        # --- Extremo A ---
+        e.origen_a = request.form.get("origen_a", e.origen_a).strip()
+        e.sala_a = request.form.get("sala_a", e.sala_a).strip()
+        e.rack_a = request.form.get("rack_a", e.rack_a).strip()
+        e.posicion_a = request.form.get("posicion_a", e.posicion_a).strip()
+
+        # --- Extremo B (nota: completarlo aqui no marca b_completo;
+        #     eso se hace desde "Completar B") ---
+        e.origen_b = request.form.get("origen_b", e.origen_b).strip()
+        e.sala_b = request.form.get("sala_b", e.sala_b).strip()
+        e.rack_b = request.form.get("rack_b", e.rack_b).strip()
+        e.posicion_b = request.form.get("posicion_b", e.posicion_b).strip()
+
+        # --- Descripciones de hilos (si vienen en el form) ---
         for h in e.hilos:
-            h.descripcion_a = request.form.get(f"a{h.numero}", h.descripcion_a)
-            h.descripcion_b = request.form.get(f"b{h.numero}", h.descripcion_b)
+            if f"a{h.numero}" in request.form:
+                h.descripcion_a = request.form.get(f"a{h.numero}", h.descripcion_a)
+            if f"b{h.numero}" in request.form:
+                h.descripcion_b = request.form.get(f"b{h.numero}", h.descripcion_b)
+
         db.session.commit()
         return redirect(url_for("dashboard"))
 
+    # ---------- GET: formulario con el diseno de la app original ----------
+    opciones = "".join(
+        f"<option value=\"{n}\" {'selected' if n == e.nombre else ''}>{n}</option>"
+        for n in CATALOGO_ENLACES)
+    tipos = "".join(
+        f"<option {'selected' if t == (e.tipo_cable or '') else ''}>{t}</option>"
+        for t in TIPOS_CABLE)
     filas = "".join(
         f"<tr><td>{h.numero}</td>"
         f"<td><input name='a{h.numero}' value=\"{h.descripcion_a}\"></td>"
         f"<td><input name='b{h.numero}' value=\"{h.descripcion_b}\"></td></tr>"
         for h in e.hilos)
+
     cuerpo = f"""
+    <style>
+      .top{{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}}
+      .top .acciones a{{margin-left:6px}}
+      .fila3{{display:grid;grid-template-columns:2fr 1.2fr 1fr;gap:18px}}
+      .dosc{{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}}
+      .cardx{{background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:14px}}
+      .cardx h4{{margin:0 0 8px;font-size:.9rem}}
+      .g3{{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}}
+      .nota{{color:#6b7280;font-size:.72rem;margin-top:6px}}
+      .btn-borde{{background:#fff;color:#374151;border:1px solid #d1d5db}}
+      .btn-verde{{background:#fff;color:#059669;border:1px solid #059669}}
+    </style>
+    <div class="top">
+      <div>
+        <p class="ref" style="margin:0">Puedes corregir cabecera, Extremos A/B y descripciones.</p>
+      </div>
+      <div class="acciones">
+        <a class="btn btn-borde" href="/">&larr; Volver</a>
+        <a class="btn btn-borde" href="{url_for('ver', id=e.id)}">Ver reporte</a>
+        <a class="btn btn-verde" href="{url_for('exportar', id=e.id)}">Exportar</a>
+      </div>
+    </div>
     <form method="post">
-      <label>Nombre</label><input name="nombre" value="{e.nombre}">
-      <label>Origen A</label><input name="origen_a" value="{e.origen_a}">
-      <label>Origen B</label><input name="origen_b" value="{e.origen_b}">
+      <div class="fila3">
+        <div>
+          <label>Nombre del Enlace</label>
+          <select name="nombre_sel">
+            <option value="__actual__" selected>(Mantener actual)</option>
+            {opciones}
+          </select>
+          <input name="nombre_manual" placeholder="(Opcional) Nombre manual del enlace"
+                 style="margin-top:6px">
+          <div class="nota">Actual: <b>{e.anillo} | {e.nombre}</b></div>
+        </div>
+        <div>
+          <label>Tipo de Cable</label>
+          <select name="tipo_cable">{tipos}</select>
+        </div>
+        <div>
+          <label>Capacidad (N hilos)</label>
+          <input name="capacidad" type="number" min="1" value="{e.capacidad}">
+          <div class="nota">Si reduces capacidad, se eliminan hilos mayores a N.</div>
+        </div>
+      </div>
+
+      <label style="margin-top:14px">Longitud Tramo Total</label>
+      <input name="longitud" value="{e.longitud or ''}" style="max-width:320px">
+
+      <div class="dosc">
+        <div class="cardx">
+          <h4>Extremo A</h4>
+          <div class="g3">
+            <div><label>Origen A</label><input name="origen_a" value="{e.origen_a}"></div>
+            <div><label>Sala A</label><input name="sala_a" value="{e.sala_a or ''}"></div>
+            <div><label>Rack A</label><input name="rack_a" value="{e.rack_a or ''}"></div>
+          </div>
+          <div style="max-width:32%"><label>Posici&oacute;n A</label>
+            <input name="posicion_a" value="{e.posicion_a or ''}"></div>
+        </div>
+        <div class="cardx">
+          <h4>Extremo B</h4>
+          <div class="g3">
+            <div><label>Origen B</label><input name="origen_b" value="{e.origen_b}"></div>
+            <div><label>Sala B</label><input name="sala_b" value="{e.sala_b or ''}"></div>
+            <div><label>Rack B</label><input name="rack_b" value="{e.rack_b or ''}"></div>
+          </div>
+          <div style="max-width:32%"><label>Posici&oacute;n B</label>
+            <input name="posicion_b" value="{e.posicion_b or ''}"></div>
+          <div class="nota">Nota: si completas B por aqu&iacute;, igual puedes ir a
+            "Completar B" si est&aacute; pendiente.</div>
+        </div>
+      </div>
+
+      <h4 style="margin-top:20px">Descripciones de hilos</h4>
       <table><tr><th>Fibra</th><th>Extremo A</th><th>Extremo B</th></tr>{filas}</table>
       <button class="btn">Guardar cambios</button>
       <a class="btn" style="background:#6b7280" href="/">Cancelar</a>
@@ -421,10 +564,15 @@ def exportar(id):
 
     ws["A1"] = f"{e.anillo} | {e.nombre}"
     ws["A1"].font = Font(bold=True, size=13, color="1F4E79")
-    ws["A2"] = (f"Capacidad: {e.capacidad} · {e.origen_a or '?'} ⇄ {e.origen_b or '?'} · "
-                f"Estado: {e.estado} · A:{'✔' if e.a_completo else 'pend.'} "
-                f"B:{'✔' if e.b_completo else 'pend.'} · "
+    ws["A2"] = (f"Capacidad: {e.capacidad} · Tipo: {e.tipo_cable or '-'} · "
+                f"Longitud: {e.longitud or '-'} · Estado: {e.estado} · "
                 f"Creado: {e.creado:%d/%m/%Y %H:%M}")
+    ws["A3"] = (f"EXTREMO A: {e.origen_a or '?'} | Sala: {e.sala_a or '-'} | "
+                f"Rack: {e.rack_a or '-'} | Posición: {e.posicion_a or '-'}")
+    ws["A4"] = (f"EXTREMO B: {e.origen_b or '?'} | Sala: {e.sala_b or '-'} | "
+                f"Rack: {e.rack_b or '-'} | Posición: {e.posicion_b or '-'}")
+    ws["A3"].font = Font(size=9, color="595959")
+    ws["A4"].font = Font(size=9, color="595959")
     ws["A2"].font = Font(size=9, color="595959")
 
     ws.append([]); ws.append(["FIBRA", f"DESCRIPCIÓN {e.origen_a or 'A'}",
