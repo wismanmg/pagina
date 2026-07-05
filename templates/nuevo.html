@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% block title %}Nuevo Enlace{% endblock %}
+{% block content %}
+<h2>Nuevo Enlace</h2>
+<p style="color:#6b7280;font-size:.8rem">Se crea la ficha; luego usa
+  <b>Completar A</b> y <b>Completar B</b> desde el dashboard.</p>
+<form method="post" style="max-width:640px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>Anillo</label>
+  <select name="anillo">{% for a in anillos %}<option>{{ a }}</option>{% endfor %}</select>
+  <label>Nombre del enlace (SITIO A - SITIO B)</label>
+  <input name="nombre" required maxlength="120">
+  <label>Capacidad (hilos)</label>
+  <select name="capacidad">{% for c in capacidades %}
+    <option {% if c==48 %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+  <label>Origen A (sugerido)</label>
+  <input name="origen_a" list="sitios">
+  <label>Origen B (sugerido)</label>
+  <input name="origen_b" list="sitios">
+  <datalist id="sitios">{% for s in sitios %}<option value="{{ s }}">{% endfor %}</datalist>
+  <div style="margin-top:16px">
+    <button class="btn btn-azul">Crear enlace</button>
+    <a class="btn btn-gris" href="{{ url_for('main.dashboard') }}">Cancelar</a>
+  </div>
+</form>
+{% endblock %}

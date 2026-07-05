@@ -1,0 +1,87 @@
+{% extends "base.html" %}{% block title %}Editar{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+  <div><h2 style="margin:0">Editar Enlace</h2>
+    <p style="color:#6b7280;font-size:.78rem;margin:4px 0 0">
+      Puedes corregir cabecera, Extremos A/B y descripciones.</p></div>
+  <div style="display:flex;gap:6px">
+    <a class="btn" href="{{ url_for('main.dashboard') }}">&larr; Volver</a>
+    <a class="btn" href="{{ url_for('main.ver', id=e.id) }}">Ver reporte</a>
+    <a class="btn btn-verde" href="{{ url_for('main.exportar', id=e.id) }}">Exportar</a>
+  </div>
+</div>
+
+<form method="post" style="margin-top:16px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div style="display:grid;grid-template-columns:2fr 1.2fr 1fr;gap:18px">
+    <div>
+      <label>Nombre del Enlace</label>
+      <select name="nombre_sel">
+        <option value="__actual__" selected>(Mantener actual)</option>
+      </select>
+      <input name="nombre_manual" placeholder="(Opcional) Nombre manual del enlace"
+             style="margin-top:6px" maxlength="120">
+      <div style="color:#6b7280;font-size:.72rem;margin-top:6px">
+        Actual: <b>{{ e.anillo }} | {{ e.nombre }}</b></div>
+      <label>Anillo</label>
+      <select name="anillo">{% for a in anillos %}
+        <option {% if a==e.anillo %}selected{% endif %}>{{ a }}</option>{% endfor %}</select>
+    </div>
+    <div>
+      <label>Tipo de Cable</label>
+      <select name="tipo_cable">{% for t in tipos %}
+        <option {% if t==e.tipo_cable %}selected{% endif %}>{{ t }}</option>{% endfor %}</select>
+      <label>Longitud Tramo Total</label>
+      <input name="longitud" value="{{ e.longitud or '' }}" maxlength="40">
+    </div>
+    <div>
+      <label>Capacidad (N hilos)</label>
+      <select name="capacidad">{% for c in capacidades %}
+        <option {% if c==e.capacidad %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+      <div style="color:#6b7280;font-size:.7rem;margin-top:4px">
+        Si reduces capacidad, se eliminan hilos mayores a N.</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px">
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:14px">
+      <h4 style="margin:0 0 8px;font-size:.9rem">Extremo A</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div><label>Origen A</label>
+          <input name="origen_a" list="sitios" value="{{ e.origen_a }}"></div>
+        <div><label>Sala A</label><input name="sala_a" value="{{ e.sala_a or '' }}"></div>
+        <div><label>Rack A</label><input name="rack_a" value="{{ e.rack_a or '' }}"></div>
+      </div>
+      <div style="max-width:32%"><label>Posición A</label>
+        <input name="posicion_a" value="{{ e.posicion_a or '' }}"></div>
+    </div>
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:14px">
+      <h4 style="margin:0 0 8px;font-size:.9rem">Extremo B</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div><label>Origen B</label>
+          <input name="origen_b" list="sitios" value="{{ e.origen_b }}"></div>
+        <div><label>Sala B</label><input name="sala_b" value="{{ e.sala_b or '' }}"></div>
+        <div><label>Rack B</label><input name="rack_b" value="{{ e.rack_b or '' }}"></div>
+      </div>
+      <div style="max-width:32%"><label>Posición B</label>
+        <input name="posicion_b" value="{{ e.posicion_b or '' }}"></div>
+      <div style="color:#6b7280;font-size:.7rem;margin-top:6px">
+        Nota: si completas B por aquí, igual puedes ir a "Completar B" si está pendiente.</div>
+    </div>
+  </div>
+  <datalist id="sitios">{% for s in sitios %}<option value="{{ s }}">{% endfor %}</datalist>
+
+  <h4 style="margin-top:20px">Descripciones de hilos</h4>
+  <table><tr><th style="width:60px">Fibra</th><th>Extremo A</th><th>Extremo B</th></tr>
+    {% for h in e.hilos %}
+    <tr><td>{{ h.numero }}</td>
+        <td><input name="a{{ h.numero }}" value="{{ h.descripcion_a }}"></td>
+        <td><input name="b{{ h.numero }}" value="{{ h.descripcion_b }}"></td></tr>
+    {% endfor %}
+  </table>
+  <div style="margin-top:16px">
+    <button class="btn btn-azul">Guardar cambios</button>
+    <a class="btn btn-gris" href="{{ url_for('main.dashboard') }}">Cancelar</a>
+  </div>
+</form>
+{% endblock %}

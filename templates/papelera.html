@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% block title %}Papelera{% endblock %}
+{% block content %}
+<h2>🗑 Papelera</h2>
+<p style="color:#6b7280;font-size:.8rem">Enlaces eliminados (borrado lógico).
+  Puedes restaurarlos.</p>
+<table style="max-width:900px">
+  <tr><th>Enlace</th><th>Eliminado por</th><th>Fecha</th><th></th></tr>
+  {% for e in enlaces %}
+  <tr>
+    <td><b>{{ e.anillo }} | {{ e.nombre }}</b></td>
+    <td>{{ e.modificado_por or '-' }}</td>
+    <td>{{ e.modificado_en.strftime('%d/%m/%Y %H:%M') if e.modificado_en else '-' }}</td>
+    <td>{% if current_user.es_editor %}
+      <form method="post" action="{{ url_for('main.restaurar', id=e.id) }}" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-verde">Restaurar</button>
+      </form>{% endif %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="4" style="color:#9ca3af">La papelera está vacía.</td></tr>
+  {% endfor %}
+</table>
+<a class="btn btn-gris" style="margin-top:14px" href="{{ url_for('main.dashboard') }}">Volver</a>
+{% endblock %}
