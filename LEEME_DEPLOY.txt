@@ -1,0 +1,30 @@
+CÓMO ARREGLAR EL DEPLOY EN RENDER
+==================================
+
+Tu servicio "pagina" está creado como tipo DOCKER, por eso falla:
+Render busca un Dockerfile y tu repo solo tiene el .py.
+
+OPCIÓN 1 (la más rápida) — Mantener el servicio Docker:
+  1. Sube estos 3 archivos al repositorio wismanmg/pagina:
+       - app.py            (el código de la aplicación)
+       - requirements.txt  (dependencias)
+       - Dockerfile        (instrucciones de build)
+  2. En Render presiona "Manual Deploy" → "Deploy latest commit".
+  3. Listo: https://pagina-gx4g.onrender.com
+
+OPCIÓN 2 — Recrear el servicio como Python (sin Docker):
+  1. Sube app.py + requirements.txt al repo.
+  2. En Render: New → Web Service → elige el repo → Language: Python 3.
+  3. Build Command:  pip install -r requirements.txt
+     Start Command:  gunicorn app:app
+  4. Deploy.
+
+NOTAS IMPORTANTES:
+- El archivo debe llamarse app.py (o cambia "app:app" por
+  "tunombre:app" en el Dockerfile / Start Command).
+- NO uses "python app.py" como comando de inicio en Render:
+  usa gunicorn, que escucha en el puerto $PORT que Render asigna.
+- Plan Free: el disco es efímero; la base SQLite se reinicia con
+  cada deploy o reinicio (los 27+3 enlaces semilla se recargan solos).
+  Para persistencia real usa PostgreSQL de Render (gratis) cambiando
+  SQLALCHEMY_DATABASE_URI por la URL que te da Render.

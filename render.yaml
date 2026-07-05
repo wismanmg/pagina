@@ -1,10 +1,7 @@
-# Configuración de despliegue en Render.com
+# Alternativa: servicio tipo Python (sin Docker)
 services:
   - type: web
-    name: reporte-hilos
+    name: pagina
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.9
