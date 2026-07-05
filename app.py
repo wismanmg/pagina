@@ -7,7 +7,10 @@ from flask import Flask, render_template
 from flask_migrate import Migrate
 from flask_wtf import CSRFProtect
 
+from jinja2 import ChoiceLoader, DictLoader
+
 from config import Config
+from plantillas import TEMPLATES
 from models import db, Usuario, Sitio, Enlace, Hilo
 from auth import auth_bp, login_manager
 from routes import main_bp
@@ -87,6 +90,10 @@ def seed(app):
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
+
+    # Plantillas: usa templates/ si existe; si no, las incrustadas en plantillas.py.
+    # Asi el deploy funciona subiendo SOLO archivos sueltos (sin carpetas).
+    app.jinja_loader = ChoiceLoader([app.jinja_loader, DictLoader(TEMPLATES)])
 
     logging.basicConfig(
         level=logging.INFO,
