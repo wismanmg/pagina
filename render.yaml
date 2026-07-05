@@ -1,0 +1,10 @@
+# Configuración de despliegue en Render.com
+services:
+  - type: web
+    name: reporte-hilos
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
