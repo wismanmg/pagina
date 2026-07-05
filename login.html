@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% block title %}Acceso{% endblock %}
+{% block content %}
+<div style="max-width:360px;margin:60px auto">
+  <h2>Iniciar sesión</h2>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Usuario</label><input name="username" required autofocus>
+    <label>Contraseña</label><input name="password" type="password" required>
+    <button class="btn btn-azul" style="margin-top:14px;width:100%">Ingresar</button>
+  </form>
+  <p style="color:#9ca3af;font-size:.72rem;margin-top:14px">
+    Demo: admin/admin123 (editor) · lector/lector123 (solo lectura)</p>
+</div>
+{% endblock %}
